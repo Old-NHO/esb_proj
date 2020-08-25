@@ -34,7 +34,7 @@ sodhi@OX:~/temp/esb_proj$ tree
 │   └── server.pem
 ├── conf
 │   ├── build.conf
-│   └── esb_endpoint.conf
+│   └── esb_endpoint.conf <-------- Name of this file must match its grandparent folder's name (here it does not)
 ├── dh2048.pem
 ├── esb.code-workspace
 ├── esb_endpoint.so
