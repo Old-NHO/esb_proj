@@ -86,8 +86,8 @@ kodev create esb_endpoint
 git clone https://github.com/nho2020/esb_proj.git
 
 # Copy only the relevant files from cloned repo into your kodev created one
-mv esb_proj/esb_app/src/* esb_endpoint/src/
-mv esb_proj/esb_app/conf/* esb_endpoint/conf/
+cp esb_proj/esb_app/src/* esb_endpoint/src/
+cp esb_proj/esb_app/conf/* esb_endpoint/conf/
 
 # Build and run the kodev application
 cd esb_endpoint/
