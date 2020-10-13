@@ -16,7 +16,7 @@ Following instructions assume that you are working on an Ubuntu machine, and are
 
 1. Open a shell and run `sudo apt update`
 1. Ensure that you have installed the essential headers and libraries: `sudo apt install build-essential`
-1. You will be writing unit tests for all your C code using [munit](https://nemequ.github.io/munit/#getting-started).
+1. You can write unit tests for all your C code using [munit](https://nemequ.github.io/munit/#getting-started). NOTE: We will start with writing the unit tests via simple hand-crafter test functions, and then later move to something like munit.
 1. Install Kore Web framework as [described here](https://docs.kore.io/3.3.1/install.html). You will use it to write an HTTP endpoint for receiving the requests for the ESB.
 NOTE: A skeleton is provided to get you started. However, you are strongly encouraged to go through the [Kore's simple guide](https://docs.kore.io/3.3.1/).
 
@@ -33,10 +33,10 @@ someuser@OX:~/temp/esb_proj/esb_app$ tree
 │   └── server.pem
 ├── conf
 │   ├── build.conf
-│   └── esb_app.conf <---- Name of this file must match its grandparent folder name
+│   └── esb_app.conf <---- Name of this file matches its grandparent folder name
 ├── dh2048.pem
-├── esb.code-workspace
-├── esb_app.so
+├── esb.code-workspace <--- This was created by my VSCode IDE. Ignore it if you are not using VSCode.
+├── esb_app.so <---- This is produced by the build step (i.e., `kodev build` or `kodev run`)
 ├── output
 │   └── test_runner
 └── src    <--------------- Your code lives under here
@@ -79,18 +79,18 @@ sudo make install
 # Change directories into a working folder
 cd /path/to/where/you/want/to/work
 
-# Name 'esb_endpoint' is important, because we will be copying the files from this repo
-kodev create esb_endpoint
+# Name 'esb_app' is important, because we will be copying the files from this repo
+kodev create esb_app
 
 # Fetch the code from this repositiry
 git clone https://github.com/nho2020/esb_proj.git
 
 # Copy only the relevant files from cloned repo into your kodev created one
-cp -r esb_proj/esb_app/src/* esb_endpoint/src/
-cp -r esb_proj/esb_app/conf/* esb_endpoint/conf/
+cp -r esb_proj/esb_app/src/* esb_app/src/
+cp -r esb_proj/esb_app/conf/* esb_app/conf/
 
 # Build and run the kodev application
-cd esb_endpoint/
+cd esb_app/
 kodev build
 kodev run
 ```
