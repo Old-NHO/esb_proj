@@ -39,7 +39,13 @@
 
 #define PATH_MAX 500
 
-extern void poll_database_for_new_requets();
+int send_bmd_path_to_socket(char *msg, char *socket_file){
+	/**
+	 * TODO: This function can be implemented in a separate module
+	 * which will also implement the socket server.
+	 */
+	return 1; /* 1 => Success */
+}
 
 /**
  * Define a suitable struct for holding the endpoint request handling result.
@@ -49,6 +55,8 @@ typedef struct
 	int status;
 	char *bmd_path;
 } endpoint_result;
+
+const char* my_sock_file = "./my_sock";
 
 int esb_endpoint(struct http_request *);
 endpoint_result save_bmd(struct http_request *);
@@ -67,17 +75,15 @@ int esb_endpoint(struct http_request *req)
 	}
 	else
 	{
-		/* Invoke the ESB's main processing logic. */
-		int esb_status = process_esb_request(epr.bmd_path);
-		if (esb_status > 0)
+		int sock_status = send_bmd_path_to_socket(epr.bmd_path, my_sock_file);
+		if (sock_status > 0)
 		{
-			//TODO: Take suitable action
+			kore_log(LOG_INFO, "BMD path sent to server socket.");
 			return (KORE_RESULT_OK);
 		}
 		else
 		{
-			//TODO: Take suitable action
-			printf("ESB failed to process the BMD.\n");
+			kore_log(LOG_ERR, "Failed to send BMD path sent to server socket.");
 			return (KORE_RESULT_ERROR);
 		}
 	}
@@ -87,13 +93,94 @@ char *create_work_dir_for_request()
 {
 	kore_log(LOG_INFO, "Creating the temporary work folder.");
 	/**
-	 * TODO: Create a temporary folder in the current directory.
+	 * Create a temporary folder in the current directory.
 	 * Its name should be unique to each request.
 	 */
 	char *temp_path = malloc(PATH_MAX * sizeof(char));
-	strcpy(temp_path, "./bmd_files/1234");
-	kore_log(LOG_INFO, "Temporary work folder: %s", temp_path);
+	char *base_dir = "./bmd_files";
+	sprintf(temp_path, "%s/%lu", base_dir, (unsigned long)time(NULL));
+	if (mkdir(base_dir, 0700) != 0)
+	{
+		kore_log(LOG_ERR, "Failed to create folder %s.", base_dir);
+	}
+	if (mkdir(temp_path, 0700) != 0)
+	{
+		kore_log(LOG_ERR, "Failed to create folder %s.", temp_path);
+	}
+	else
+	{
+		kore_log(LOG_INFO, "Temporary work folder: %s", temp_path);
+	}
 	return temp_path;
+}
+
+void do_cleanup(endpoint_result *ep_res_ptr, char *bmd_file_path, int fd)
+{
+	if (close(fd) == -1)
+		kore_log(LOG_WARNING, "close(%s): %s", bmd_file_path, errno_s);
+
+	if (ep_res_ptr->status < 0)
+	{
+		kore_log(LOG_ERR, "We got an error. Deleteing the file %s", bmd_file_path);
+		if (unlink(bmd_file_path) == -1)
+		{
+			kore_log(LOG_WARNING, "unlink(%s): %s",
+					 bmd_file_path, errno_s);
+		}
+	}
+	else
+	{
+		ep_res_ptr->status = 1;
+		printf("BMD is saved\n");
+	}
+}
+
+void write_data_to_file(struct http_request *req,
+						endpoint_result *ep_res_ptr,
+						char *bmd_file_path, int fd,
+						struct http_file *file)
+{
+	u_int8_t buf[BUFSIZ];
+	ssize_t ret, written;
+	/* While we have data from http_file_read(), write it. */
+	/* Alternatively you could look at file->offset and file->length. */
+	for (;;)
+	{
+		ret = http_file_read(file, buf, sizeof(buf));
+		if (ret == -1)
+		{
+			kore_log(LOG_ERR, "failed to read from file");
+			http_response(req, 500, NULL, 0);
+			ep_res_ptr->status = -1;
+			goto cleanup;
+		}
+
+		if (ret == 0)
+			break;
+
+		written = write(fd, buf, ret);
+		kore_log(LOG_INFO, "Written %d bytes to %s.", written, bmd_file_path);
+		if (written == -1)
+		{
+			kore_log(LOG_ERR, "write(%s): %s",
+					 bmd_file_path, errno_s);
+			http_response(req, 500, NULL, 0);
+			ep_res_ptr->status = -1;
+			goto cleanup;
+		}
+
+		if (written != ret)
+		{
+			kore_log(LOG_ERR, "partial write on %s",
+					 bmd_file_path);
+			http_response(req, 500, NULL, 0);
+			ep_res_ptr->status = -1;
+			goto cleanup;
+		}
+	}
+
+cleanup:
+	do_cleanup(ep_res_ptr, bmd_file_path, fd);
 }
 
 endpoint_result
@@ -102,11 +189,6 @@ save_bmd(struct http_request *req)
 	endpoint_result ep_res;
 	/* Default to OK. 1 => OK, -ve => Errors */
 	ep_res.status = 1;
-
-	int fd;
-	struct http_file *file;
-	u_int8_t buf[BUFSIZ];
-	ssize_t ret, written;
 
 	/* Only deal with POSTs. */
 	if (req->method != HTTP_METHOD_POST)
@@ -121,6 +203,7 @@ save_bmd(struct http_request *req)
 	http_populate_multipart_form(req);
 
 	/* Find our file. It is expected to be under parameter named bmd_file */
+	struct http_file *file;
 	if ((file = http_file_lookup(req, "bmd_file")) == NULL)
 	{
 		http_response(req, 400, NULL, 0);
@@ -133,98 +216,23 @@ save_bmd(struct http_request *req)
 	char *req_folder = create_work_dir_for_request();
 	sprintf(bmd_file_path, "%s/%s", req_folder, file->filename);
 
-	fd = open(bmd_file_path, O_CREAT | O_TRUNC | O_WRONLY, 0700);
+	int fd = open(bmd_file_path, O_CREAT | O_TRUNC | O_WRONLY, 0700);
 	if (fd == -1)
 	{
+		kore_log(LOG_ERR, "Failed to create the file at %s\n", bmd_file_path);
 		http_response(req, 500, NULL, 0);
 		ep_res.status = -1;
 		return ep_res;
 	}
-
-	/* While we have data from http_file_read(), write it. */
-	/* Alternatively you could look at file->offset and file->length. */
-	/**
-	 * TODO: The BMD should be saved at a proper unique file path.
-	 * That path then should be returned to the caller for allowing
-	 * further processing by the ESB.
-	 */
-	for (;;)
+	printf("BMD file to be saved at: %s\n", bmd_file_path);
+	write_data_to_file(req, &ep_res, bmd_file_path, fd, file);
+	if (ep_res.status > 0)
 	{
-		ret = http_file_read(file, buf, sizeof(buf));
-		if (ret == -1)
-		{
-			kore_log(LOG_ERR, "failed to read from file");
-			http_response(req, 500, NULL, 0);
-			ep_res.status = -1;
-			goto cleanup;
-		}
-
-		if (ret == 0)
-			break;
-
-		written = write(fd, buf, ret);
-		kore_log(LOG_INFO, "Written %d bytes to %s.", written, bmd_file_path);
-		if (written == -1)
-		{
-			kore_log(LOG_ERR, "write(%s): %s",
-					 bmd_file_path, errno_s);
-			http_response(req, 500, NULL, 0);
-			ep_res.status = -1;
-			goto cleanup;
-		}
-
-		if (written != ret)
-		{
-			kore_log(LOG_ERR, "partial write on %s",
-					 bmd_file_path);
-			http_response(req, 500, NULL, 0);
-			ep_res.status = -1;
-			goto cleanup;
-		}
-	}
-
-	http_response(req, 200, NULL, 0);
-	kore_log(LOG_INFO, "file '%s' successfully received",
-			 file->filename);
-	ep_res.bmd_path = malloc(strlen(bmd_file_path) * sizeof(char) + 1);
-	strcpy(ep_res.bmd_path, bmd_file_path);
-
-cleanup:
-	if (close(fd) == -1)
-		kore_log(LOG_WARNING, "close(%s): %s", bmd_file_path, errno_s);
-
-	if (ep_res.status < 0)
-	{
-		kore_log(LOG_ERR, "We got an error. Deleteing the file %s", bmd_file_path);
-		if (unlink(bmd_file_path) == -1)
-		{
-			kore_log(LOG_WARNING, "unlink(%s): %s",
-					 bmd_file_path, errno_s);
-		}
-	}
-	else
-	{
-		ep_res.status = 1;
-		printf("BMD is saved\n");
+		http_response(req, 200, NULL, 0);
+		kore_log(LOG_INFO, "BMD file '%s' successfully received",
+				 file->filename);
+		ep_res.bmd_path = malloc(strlen(bmd_file_path) * sizeof(char) + 1);
+		strcpy(ep_res.bmd_path, bmd_file_path);
 	}
 	return ep_res;
-}
-
-// Needed to terminate the polling thread
-pthread_t thread_id;
-void kore_parent_configure(int argc, char *argv[])
-{
-	printf("\n%%%%%%%%%% kore_parent_configure\n");
-	// TODO: Start a new thread for task polling
-	pthread_create(&thread_id, NULL, poll_database_for_new_requets, NULL);
-}
-
-void kore_parent_teardown(void)
-{
-	printf(">>>> kore_parent_teardown\n");
-	/**
-	 * TODO: Terminate the task polling thread.
-	 * Instead of killing it, ask the thread to terminate itself.
-	 */
-	pthread_cancel(thread_id);
 }
