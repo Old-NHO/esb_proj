@@ -17,8 +17,8 @@ Following instructions assume that you are working on an Ubuntu machine, and are
 1. Open a shell and run `sudo apt update`
 1. Ensure that you have installed the essential headers and libraries: `sudo apt install build-essential`
 1. You can write unit tests for all your C code using [munit](https://nemequ.github.io/munit/#getting-started). NOTE: We will start with writing the unit tests via simple hand-crafter test functions, and then later move to something like munit.
-1. Install Kore Web framework as [described here](https://docs.kore.io/3.3.1/install.html). You will use it to write an HTTP endpoint for receiving the requests for the ESB.
-NOTE: A skeleton is provided to get you started. However, you are strongly encouraged to go through the [Kore's simple guide](https://docs.kore.io/3.3.1/).
+1. Install Kore Web framework as [described here](https://docs.kore.io/4.1.0/install.html). You will use it to write an HTTP endpoint for receiving the requests for the ESB.
+NOTE: A skeleton is provided to get you started. However, you are strongly encouraged to go through the [Kore's simple guide](https://docs.kore.io/4.1.0/).
 
 ### Source code layout
 
@@ -68,9 +68,9 @@ sudo apt install wget
 sudo apt install curl
 
 # Download the kodev sources
-wget https://kore.io/releases/kore-3.2.0.tar.gz
-tar -xf kore-3.2.0.tar.gz
-cd kore-3.2.0/
+wget https://kore.io/releases/kore-4.1.0.tar.gz
+tar -xf kore-4.1.0.tar.gz
+cd kore-4.1.0/
 
 # Build and install kodev
 make
